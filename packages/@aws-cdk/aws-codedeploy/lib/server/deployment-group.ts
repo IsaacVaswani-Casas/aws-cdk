@@ -7,8 +7,9 @@ import * as cdk from '@aws-cdk/core';
 import { ArnFormat } from '@aws-cdk/core';
 import { Construct } from 'constructs';
 import { CfnDeploymentGroup } from '../codedeploy.generated';
+import { ImportedDeploymentGroupBase } from '../private/base-deployment-group';
+import { arnForDeploymentGroup, renderAlarmConfiguration, renderAutoRollbackConfiguration, validateName } from '../private/utils';
 import { AutoRollbackConfig } from '../rollback-config';
-import { arnForDeploymentGroup, renderAlarmConfiguration, renderAutoRollbackConfiguration, validateName } from '../utils';
 import { IServerApplication, ServerApplication } from './application';
 import { IServerDeploymentConfig, ServerDeploymentConfig } from './deployment-config';
 import { LoadBalancer, LoadBalancerGeneration } from './load-balancer';
@@ -44,8 +45,22 @@ export interface ServerDeploymentGroupAttributes {
   /**
    * The physical, human-readable name of the CodeDeploy EC2/on-premise Deployment Group
    * that we are referencing.
+   *
+   * Account and region for the DeploymentGroup are taken from the stack the
+   * construct is created in.
+   *
+   * @default - Either deploymentGroupName or deploymentGroupArn is required
    */
-  readonly deploymentGroupName: string;
+  readonly deploymentGroupName?: string;
+
+  /**
+   * The ARN of the CodeDeploy EC2/on-premise Deployment Group that we are referencing.
+   *
+   * Account and region for the DeploymentGroup are taken from the ARN.
+   *
+   * @default - Either deploymentGroupName or deploymentGroupArn is required
+   */
+  readonly deploymentGroupArn?: string;
 
   /**
    * The Deployment Configuration this Deployment Group uses.
@@ -79,19 +94,21 @@ abstract class ServerDeploymentGroupBase extends cdk.Resource implements IServer
   }
 }
 
-class ImportedServerDeploymentGroup extends ServerDeploymentGroupBase {
+class ImportedServerDeploymentGroup extends ImportedDeploymentGroupBase implements IServerDeploymentGroup {
   public readonly application: IServerApplication;
   public readonly role?: iam.Role = undefined;
-  public readonly deploymentGroupName: string;
-  public readonly deploymentGroupArn: string;
   public readonly autoScalingGroups?: autoscaling.AutoScalingGroup[] = undefined;
+  public readonly deploymentConfig: IServerDeploymentConfig;
 
   constructor(scope: Construct, id: string, props: ServerDeploymentGroupAttributes) {
-    super(scope, id, props.deploymentConfig);
+    super(scope, id, {
+      application: props.application,
+      deploymentGroupArn: props.deploymentGroupArn,
+      deploymentGroupName: props.deploymentGroupName,
+    });
 
     this.application = props.application;
-    this.deploymentGroupName = props.deploymentGroupName;
-    this.deploymentGroupArn = arnForDeploymentGroup(props.application.applicationName, props.deploymentGroupName);
+    this.deploymentConfig = props.deploymentConfig || ServerDeploymentConfig.ONE_AT_A_TIME;
   }
 }
 
@@ -308,7 +325,7 @@ export class ServerDeploymentGroup extends ServerDeploymentGroupBase {
     });
 
     this.deploymentGroupName = this.getResourceNameAttribute(resource.ref);
-    this.deploymentGroupArn = this.getResourceArnAttribute(arnForDeploymentGroup(this.application.applicationName, resource.ref), {
+    this.deploymentGroupArn = this.getResourceArnAttribute(arnForDeploymentGroup(this.stack, this.application.applicationName, resource.ref), {
       service: 'codedeploy',
       resource: 'deploymentgroup',
       resourceName: `${this.application.applicationName}/${this.physicalName}`,

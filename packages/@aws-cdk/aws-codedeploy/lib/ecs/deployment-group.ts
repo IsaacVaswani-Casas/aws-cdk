@@ -5,8 +5,9 @@ import * as iam from '@aws-cdk/aws-iam';
 import * as cdk from '@aws-cdk/core';
 import { Construct } from 'constructs';
 import { CfnDeploymentGroup } from '../codedeploy.generated';
+import { ImportedDeploymentGroupBase } from '../private/base-deployment-group';
+import { arnForDeploymentGroup, renderAlarmConfiguration, renderAutoRollbackConfiguration, validateName } from '../private/utils';
 import { AutoRollbackConfig } from '../rollback-config';
-import { arnForDeploymentGroup, renderAlarmConfiguration, renderAutoRollbackConfiguration, validateName } from '../utils';
 import { IEcsApplication, EcsApplication } from './application';
 import { EcsDeploymentConfig, IEcsDeploymentConfig } from './deployment-config';
 
@@ -184,7 +185,7 @@ export interface EcsDeploymentGroupProps {
  */
 export class EcsDeploymentGroup extends cdk.Resource implements IEcsDeploymentGroup {
   /**
-   * Import an ECS Deployment Group defined outside the CDK app.
+   * Reference an ECS Deployment Group defined outside the CDK app.
    *
    * @param scope the parent Construct for this new Construct
    * @param id the logical ID of this new Construct
@@ -262,7 +263,7 @@ export class EcsDeploymentGroup extends cdk.Resource implements IEcsDeploymentGr
     });
 
     this.deploymentGroupName = this.getResourceNameAttribute(resource.ref);
-    this.deploymentGroupArn = this.getResourceArnAttribute(arnForDeploymentGroup(this.application.applicationName, resource.ref), {
+    this.deploymentGroupArn = this.getResourceArnAttribute(arnForDeploymentGroup(this.stack, this.application.applicationName, resource.ref), {
       service: 'codedeploy',
       resource: 'deploymentgroup',
       resourceName: `${this.application.applicationName}/${this.physicalName}`,
@@ -344,8 +345,22 @@ export interface EcsDeploymentGroupAttributes {
   /**
    * The physical, human-readable name of the CodeDeploy ECS Deployment Group
    * that we are referencing.
+   *
+   * Account and region for the DeploymentGroup are taken from the stack the
+   * construct is created in.
+   *
+   * @default - Either deploymentGroupName or deploymentGroupArn is required
    */
-  readonly deploymentGroupName: string;
+  readonly deploymentGroupName?: string;
+
+  /**
+   * The ARN of the CodeDeploy ECS Deployment Group that we are referencing.
+   *
+   * Account and region for the DeploymentGroup are taken from the ARN.
+   *
+   * @default - Either deploymentGroupName or deploymentGroupArn is required
+   */
+  readonly deploymentGroupArn?: string;
 
   /**
    * The Deployment Configuration this Deployment Group uses.
@@ -355,17 +370,18 @@ export interface EcsDeploymentGroupAttributes {
   readonly deploymentConfig?: IEcsDeploymentConfig;
 }
 
-class ImportedEcsDeploymentGroup extends cdk.Resource implements IEcsDeploymentGroup {
+class ImportedEcsDeploymentGroup extends ImportedDeploymentGroupBase implements IEcsDeploymentGroup {
   public readonly application: IEcsApplication;
-  public readonly deploymentGroupName: string;
-  public readonly deploymentGroupArn: string;
   public readonly deploymentConfig: IEcsDeploymentConfig;
 
-  constructor(scope:Construct, id: string, props: EcsDeploymentGroupAttributes) {
-    super(scope, id);
+  constructor(scope: Construct, id: string, props: EcsDeploymentGroupAttributes) {
+    super(scope, id, {
+      application: props.application,
+      deploymentGroupArn: props.deploymentGroupArn,
+      deploymentGroupName: props.deploymentGroupName,
+    });
+
     this.application = props.application;
-    this.deploymentGroupName = props.deploymentGroupName;
-    this.deploymentGroupArn = arnForDeploymentGroup(props.application.applicationName, props.deploymentGroupName);
     this.deploymentConfig = props.deploymentConfig || EcsDeploymentConfig.ALL_AT_ONCE;
   }
 }

@@ -1,7 +1,7 @@
-import { ArnFormat, IResource, Resource } from '@aws-cdk/core';
+import { ArnFormat, IResource, Resource, Stack } from '@aws-cdk/core';
 import { Construct } from 'constructs';
 import { CfnApplication } from '../codedeploy.generated';
-import { arnForApplication, validateName } from '../utils';
+import { arnForApplication, validateName } from '../private/utils';
 
 /**
  * Represents a reference to a CodeDeploy Application deploying to EC2/on-premise instances.
@@ -49,7 +49,7 @@ export class ServerApplication extends Resource implements IServerApplication {
    */
   public static fromServerApplicationName(scope: Construct, id: string, serverApplicationName: string): IServerApplication {
     class Import extends Resource implements IServerApplication {
-      public readonly applicationArn = arnForApplication(serverApplicationName);
+      public readonly applicationArn = arnForApplication(Stack.of(scope), serverApplicationName);
       public readonly applicationName = serverApplicationName;
     }
 
@@ -71,7 +71,7 @@ export class ServerApplication extends Resource implements IServerApplication {
     });
 
     this.applicationName = this.getResourceNameAttribute(resource.ref);
-    this.applicationArn = this.getResourceArnAttribute(arnForApplication(resource.ref), {
+    this.applicationArn = this.getResourceArnAttribute(arnForApplication(Stack.of(scope), resource.ref), {
       service: 'codedeploy',
       resource: 'application',
       resourceName: this.physicalName,

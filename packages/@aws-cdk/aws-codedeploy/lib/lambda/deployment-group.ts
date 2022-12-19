@@ -2,10 +2,12 @@ import * as cloudwatch from '@aws-cdk/aws-cloudwatch';
 import * as iam from '@aws-cdk/aws-iam';
 import * as lambda from '@aws-cdk/aws-lambda';
 import * as cdk from '@aws-cdk/core';
+import { Stack } from '@aws-cdk/core';
 import { Construct } from 'constructs';
 import { CfnDeploymentGroup } from '../codedeploy.generated';
+import { ImportedDeploymentGroupBase } from '../private/base-deployment-group';
+import { arnForDeploymentGroup, renderAlarmConfiguration, renderAutoRollbackConfiguration, validateName } from '../private/utils';
 import { AutoRollbackConfig } from '../rollback-config';
-import { arnForDeploymentGroup, renderAlarmConfiguration, renderAutoRollbackConfiguration, validateName } from '../utils';
 import { ILambdaApplication, LambdaApplication } from './application';
 import { ILambdaDeploymentConfig, LambdaDeploymentConfig } from './deployment-config';
 
@@ -175,7 +177,7 @@ export class LambdaDeploymentGroup extends cdk.Resource implements ILambdaDeploy
     });
 
     this.deploymentGroupName = this.getResourceNameAttribute(resource.ref);
-    this.deploymentGroupArn = this.getResourceArnAttribute(arnForDeploymentGroup(this.application.applicationName, resource.ref), {
+    this.deploymentGroupArn = this.getResourceArnAttribute(arnForDeploymentGroup(Stack.of(this), this.application.applicationName, resource.ref), {
       service: 'codedeploy',
       resource: 'deploymentgroup',
       resourceName: `${this.application.applicationName}/${this.physicalName}`,
@@ -273,8 +275,22 @@ export interface LambdaDeploymentGroupAttributes {
   /**
    * The physical, human-readable name of the CodeDeploy Lambda Deployment Group
    * that we are referencing.
+   *
+   * Account and region for the DeploymentGroup are taken from the stack the
+   * construct is created in.
+   *
+   * @default - Either deploymentGroupName or deploymentGroupArn is required
    */
-  readonly deploymentGroupName: string;
+  readonly deploymentGroupName?: string;
+
+  /**
+   * The ARN of the CodeDeploy Lambda Deployment Group that we are referencing.
+   *
+   * Account and region for the DeploymentGroup are taken from the ARN.
+   *
+   * @default - Either deploymentGroupName or deploymentGroupArn is required
+   */
+  readonly deploymentGroupArn?: string;
 
   /**
    * The Deployment Configuration this Deployment Group uses.
@@ -284,17 +300,18 @@ export interface LambdaDeploymentGroupAttributes {
   readonly deploymentConfig?: ILambdaDeploymentConfig;
 }
 
-class ImportedLambdaDeploymentGroup extends cdk.Resource implements ILambdaDeploymentGroup {
+class ImportedLambdaDeploymentGroup extends ImportedDeploymentGroupBase implements ILambdaDeploymentGroup {
   public readonly application: ILambdaApplication;
-  public readonly deploymentGroupName: string;
-  public readonly deploymentGroupArn: string;
   public readonly deploymentConfig: ILambdaDeploymentConfig;
 
-  constructor(scope:Construct, id: string, props: LambdaDeploymentGroupAttributes) {
-    super(scope, id);
+  constructor(scope: Construct, id: string, props: LambdaDeploymentGroupAttributes) {
+    super(scope, id, {
+      application: props.application,
+      deploymentGroupArn: props.deploymentGroupArn,
+      deploymentGroupName: props.deploymentGroupName,
+    });
+
     this.application = props.application;
-    this.deploymentGroupName = props.deploymentGroupName;
-    this.deploymentGroupArn = arnForDeploymentGroup(props.application.applicationName, props.deploymentGroupName);
     this.deploymentConfig = props.deploymentConfig || LambdaDeploymentConfig.CANARY_10PERCENT_5MINUTES;
   }
 }

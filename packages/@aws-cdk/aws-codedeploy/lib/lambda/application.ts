@@ -1,7 +1,7 @@
-import { ArnFormat, IResource, Resource } from '@aws-cdk/core';
+import { ArnFormat, IResource, Resource, Stack } from '@aws-cdk/core';
 import { Construct } from 'constructs';
 import { CfnApplication } from '../codedeploy.generated';
-import { arnForApplication, validateName } from '../utils';
+import { arnForApplication, validateName } from '../private/utils';
 
 /**
  * Represents a reference to a CodeDeploy Application deploying to AWS Lambda.
@@ -49,7 +49,7 @@ export class LambdaApplication extends Resource implements ILambdaApplication {
    */
   public static fromLambdaApplicationName(scope: Construct, id: string, lambdaApplicationName: string): ILambdaApplication {
     class Import extends Resource implements ILambdaApplication {
-      public applicationArn = arnForApplication(lambdaApplicationName);
+      public applicationArn = arnForApplication(Stack.of(scope), lambdaApplicationName);
       public applicationName = lambdaApplicationName;
     }
 
@@ -70,7 +70,7 @@ export class LambdaApplication extends Resource implements ILambdaApplication {
     });
 
     this.applicationName = this.getResourceNameAttribute(resource.ref);
-    this.applicationArn = this.getResourceArnAttribute(arnForApplication(resource.ref), {
+    this.applicationArn = this.getResourceArnAttribute(arnForApplication(Stack.of(this), resource.ref), {
       service: 'codedeploy',
       resource: 'application',
       resourceName: this.physicalName,

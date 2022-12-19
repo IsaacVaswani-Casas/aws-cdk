@@ -1,7 +1,7 @@
-import { ArnFormat, IResource, Resource } from '@aws-cdk/core';
+import { ArnFormat, IResource, Resource, Stack } from '@aws-cdk/core';
 import { Construct } from 'constructs';
 import { CfnApplication } from '../codedeploy.generated';
-import { arnForApplication, validateName } from '../utils';
+import { arnForApplication, validateName } from '../private/utils';
 
 /**
  * Represents a reference to a CodeDeploy Application deploying to Amazon ECS.
@@ -49,7 +49,7 @@ export class EcsApplication extends Resource implements IEcsApplication {
    */
   public static fromEcsApplicationName(scope: Construct, id: string, ecsApplicationName: string): IEcsApplication {
     class Import extends Resource implements IEcsApplication {
-      public applicationArn = arnForApplication(ecsApplicationName);
+      public applicationArn = arnForApplication(Stack.of(scope), ecsApplicationName);
       public applicationName = ecsApplicationName;
     }
 
@@ -70,7 +70,7 @@ export class EcsApplication extends Resource implements IEcsApplication {
     });
 
     this.applicationName = this.getResourceNameAttribute(resource.ref);
-    this.applicationArn = this.getResourceArnAttribute(arnForApplication(resource.ref), {
+    this.applicationArn = this.getResourceArnAttribute(arnForApplication(Stack.of(scope), resource.ref), {
       service: 'codedeploy',
       resource: 'application',
       resourceName: this.physicalName,
